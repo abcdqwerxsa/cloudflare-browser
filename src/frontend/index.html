@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Browser Run Toolkit</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%233B82F6'/%3E%3Crect x='5' y='7' width='22' height='15' rx='2' fill='none' stroke='white' stroke-width='2'/%3E%3Cline x1='11' y1='26' x2='21' y2='26' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='16' y1='22' x2='16' y2='26' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -314,7 +315,7 @@ function renderForm() {
   h += '<div class="adv-panel">';
   h += '<div class="form-row"><div class="form-group"><label>Viewport Width</label><input id="advWidth" class="form-input" type="number" value="1280" /></div><div class="form-group"><label>Viewport Height</label><input id="advHeight" class="form-input" type="number" value="800" /></div></div>';
   h += '<div class="form-group"><label>Wait for selector</label><input id="advWaitSelector" class="form-input" placeholder="CSS selector to wait for" /></div>';
-  h += '<div class="form-group"><label>Custom JS</label><textarea id="advJs" class="form-input" placeholder="document.querySelector('.btn').click()"></textarea></div>';
+  h += '<div class="form-group"><label>Custom JS</label><textarea id="advJs" class="form-input" placeholder="document.querySelector(&quot;.btn&quot;).click()"></textarea></div>';
   h += '<div class="form-group"><label>Custom CSS</label><textarea id="advCss" class="form-input" placeholder="body { font-size: 16px; }"></textarea></div>';
   h += '<div class="form-group"><label>Cookies</label><input id="advCookies" class="form-input" placeholder="name=val; name2=val2" /></div>';
   h += '<div class="form-group"><label>User-Agent</label><input id="advUA" class="form-input" placeholder="Custom user agent" /></div>';
@@ -563,16 +564,9 @@ async function displayResult(resp, tab) {
 
 // ---- Session actions ----
 async function createSession() {
-  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Creating session...</div>';
-  const resp = await apiFetch("/api/session", { method: "POST" });
-  const data = await resp.json();
-  if (resp.ok) {
-    activeSessionId = data.sessionId;
-    renderSessionPanel();
-    resultEl.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-  } else {
-    resultEl.innerHTML = `<div style="color:var(--red)">${JSON.stringify(data)}</div>`;
-  }
+  activeSessionId = crypto.randomUUID();
+  renderSessionPanel();
+  resultEl.innerHTML = `<div style="color:var(--green)">Session created: ${activeSessionId.substring(0,8)}...<br><span style="color:var(--muted);font-size:12px">Browser will launch on first operation</span></div>`;
 }
 
 async function closeSession() {

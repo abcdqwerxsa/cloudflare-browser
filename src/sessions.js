@@ -1,22 +1,10 @@
-/**
- * Route session API requests to Durable Object instances.
- */
 export async function handleSessionRequest(request, path, env) {
   const idPattern = /^\/api\/session\/([0-9a-f-]+)(\/.*)?$/;
 
-  // POST /api/session — create new session
+  // POST /api/session — create new session (returns immediately, browser launches on first use)
   if (request.method === "POST" && path === "/api/session") {
     const sessionId = crypto.randomUUID();
-    const doId = env.BROWSER_SESSIONS.idFromName(sessionId);
-    const stub = env.BROWSER_SESSIONS.get(doId);
-
-    const doResponse = await stub.fetch(new Request(new URL("/launch", request.url), {
-      method: "POST",
-    }));
-
-    const result = await doResponse.json();
-    return new Response(JSON.stringify({ sessionId, ...result }), {
-      status: doResponse.status,
+    return new Response(JSON.stringify({ sessionId, status: "created" }), {
       headers: { "Content-Type": "application/json" },
     });
   }

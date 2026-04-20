@@ -11,33 +11,41 @@ export class BrowserSessionDO {
     this.lastActivity = Date.now();
   }
 
+  async ensureBrowser() {
+    if (this.browser && this.page) return;
+    if (!this.env.MYBROWSER) {
+      throw new Error("Browser binding (MYBROWSER) not configured");
+    }
+    this.browser = await puppeteer.launch(this.env.MYBROWSER);
+    this.page = await this.browser.newPage();
+    this.lastActivity = Date.now();
+    await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
     const path = url.pathname;
 
     try {
-      if (request.method === "POST" && path === "/launch") {
-        return await this.handleLaunch();
-      }
+      if (request.method === "DELETE" && path === "/close") return await this.handleClose();
+      if (request.method === "GET" && path === "/status") return await this.handleStatus();
 
-      if (!this.browser) {
-        return new Response(JSON.stringify({ error: "Browser not launched" }), {
-          status: 400,
+      // All write operations auto-launch browser on first use
+      if (request.method === "POST") {
+        await this.ensureBrowser();
+        this.lastActivity = Date.now();
+        await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
+
+        if (path === "/navigate") return await this.handleNavigate(request);
+        if (path === "/screenshot") return await this.handleScreenshot(request);
+        if (path === "/pdf") return await this.handlePdf(request);
+        if (path === "/evaluate") return await this.handleEvaluate(request);
+        if (path === "/action") return await this.handleAction(request);
+        if (path === "/cookies") return await this.handleCookies(request);
+        if (path === "/launch") return new Response(JSON.stringify({ status: "launched" }), {
           headers: { "Content-Type": "application/json" },
         });
       }
-
-      this.lastActivity = Date.now();
-      await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
-
-      if (request.method === "POST" && path === "/navigate") return await this.handleNavigate(request);
-      if (request.method === "POST" && path === "/screenshot") return await this.handleScreenshot(request);
-      if (request.method === "POST" && path === "/pdf") return await this.handlePdf(request);
-      if (request.method === "POST" && path === "/evaluate") return await this.handleEvaluate(request);
-      if (request.method === "POST" && path === "/action") return await this.handleAction(request);
-      if (request.method === "POST" && path === "/cookies") return await this.handleCookies(request);
-      if (request.method === "GET" && path === "/status") return await this.handleStatus();
-      if (request.method === "DELETE" && path === "/close") return await this.handleClose();
 
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
@@ -49,21 +57,6 @@ export class BrowserSessionDO {
         headers: { "Content-Type": "application/json" },
       });
     }
-  }
-
-  async handleLaunch() {
-    if (this.browser) {
-      try { await this.browser.close(); } catch {}
-      this.browser = null;
-      this.page = null;
-    }
-    this.browser = await puppeteer.launch(this.env.MYBROWSER);
-    this.page = await this.browser.newPage();
-    this.lastActivity = Date.now();
-    await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
-    return new Response(JSON.stringify({ status: "launched" }), {
-      headers: { "Content-Type": "application/json" },
-    });
   }
 
   async handleNavigate(request) {
