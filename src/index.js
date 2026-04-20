@@ -28,18 +28,20 @@ export default {
     // Quick Actions: POST /api/:action
     const action = path.startsWith("/api/") ? path.slice(5) : null;
     if (request.method === "POST" && action && QUICK_ACTIONS.includes(action)) {
-      const body = await request.json();
+      let body;
+      try { body = await request.json(); } catch { return new Response("Invalid JSON body", { status: 400 }); }
       return proxyQuickAction(action, body, env.CF_ACCOUNT_ID, env.CF_API_TOKEN);
     }
 
     // Crawl: POST /api/crawl
     if (request.method === "POST" && path === "/api/crawl") {
-      const body = await request.json();
+      let body;
+      try { body = await request.json(); } catch { return new Response("Invalid JSON body", { status: 400 }); }
       return startCrawl(body, env.CF_ACCOUNT_ID, env.CF_API_TOKEN);
     }
 
     // Crawl: GET /api/crawl/:jobId
-    const crawlMatch = path.match(/^\/api\/crawl\/([0-9a-f-]+)$/);
+    const crawlMatch = path.match(/^\/api\/crawl\/([a-zA-Z0-9_-]+)$/);
     if (request.method === "GET" && crawlMatch) {
       return getCrawlStatus(crawlMatch[1], url.searchParams.toString(), env.CF_ACCOUNT_ID, env.CF_API_TOKEN);
     }

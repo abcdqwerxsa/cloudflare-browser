@@ -28,7 +28,7 @@ export class BrowserSessionDO {
       }
 
       this.lastActivity = Date.now();
-      await this.state.storage.setAlarm(MAX_IDLE_MS);
+      await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
 
       if (request.method === "POST" && path === "/navigate") return await this.handleNavigate(request);
       if (request.method === "POST" && path === "/screenshot") return await this.handleScreenshot(request);
@@ -53,12 +53,14 @@ export class BrowserSessionDO {
 
   async handleLaunch() {
     if (this.browser) {
-      await this.browser.close();
+      try { await this.browser.close(); } catch {}
+      this.browser = null;
+      this.page = null;
     }
     this.browser = await puppeteer.launch(this.env.MYBROWSER);
     this.page = await this.browser.newPage();
     this.lastActivity = Date.now();
-    await this.state.storage.setAlarm(MAX_IDLE_MS);
+    await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
     return new Response(JSON.stringify({ status: "launched" }), {
       headers: { "Content-Type": "application/json" },
     });
@@ -90,7 +92,7 @@ export class BrowserSessionDO {
 
   async handleEvaluate(request) {
     const { expression } = await request.json();
-    const result = await this.page.evaluate(expression);
+    const result = await this.page.evaluate(new Function(expression));
     return new Response(JSON.stringify({ result }), {
       headers: { "Content-Type": "application/json" },
     });
@@ -142,7 +144,7 @@ export class BrowserSessionDO {
 
   async handleClose() {
     if (this.browser) {
-      await this.browser.close();
+      try { await this.browser.close(); } catch {}
       this.browser = null;
       this.page = null;
     }
@@ -153,7 +155,7 @@ export class BrowserSessionDO {
 
   async alarm() {
     if (this.browser && Date.now() - this.lastActivity > MAX_IDLE_MS) {
-      await this.browser.close();
+      try { await this.browser.close(); } catch {}
       this.browser = null;
       this.page = null;
     }
