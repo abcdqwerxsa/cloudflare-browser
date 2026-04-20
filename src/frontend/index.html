@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browser Run Toolkit</title>
+<style>
+  :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --accent-hover: #2563eb; --success: #22c55e; --error: #ef4444; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .container { max-width: 960px; margin: 0 auto; padding: 16px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .topbar h1 { font-size: 18px; font-weight: 600; }
+  .topbar input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; width: 320px; font-size: 13px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; }
+  .tab { padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); transition: all .15s; }
+  .tab:hover { color: var(--text); border-color: var(--accent); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 14px; }
+  .form-group textarea { font-family: monospace; min-height: 60px; resize: vertical; }
+  .form-group select[multiple] { min-height: 60px; }
+  .form-row { display: flex; gap: 12px; }
+  .form-row .form-group { flex: 1; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; }
+  .checkbox-row input[type="checkbox"] { accent-color: var(--accent); }
+  .advanced-toggle { cursor: pointer; color: var(--muted); font-size: 12px; margin-bottom: 8px; user-select: none; }
+  .advanced-toggle:hover { color: var(--text); }
+  .advanced { display: none; }
+  .advanced.open { display: block; }
+  .btn { padding: 10px 24px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: background .15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-danger { background: var(--error); color: #fff; }
+  .btn-danger:hover { opacity: .9; }
+  .result { margin-top: 20px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; min-height: 80px; }
+  .result img { max-width: 100%; border-radius: 4px; }
+  .result pre { white-space: pre-wrap; word-break: break-all; font-size: 13px; max-height: 500px; overflow-y: auto; }
+  .result .loading { color: var(--muted); }
+  .session-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .session-panel .session-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .session-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .session-actions input, .session-actions select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 4px; font-size: 13px; }
+  .session-actions .btn { padding: 6px 14px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <h1>Browser Run Toolkit</h1>
+    <input type="password" id="apiKey" placeholder="Enter API Key (saved locally)" />
+  </div>
+  <div class="tabs" id="tabBar"></div>
+  <div id="tabContent"></div>
+  <div class="result" id="result">
+    <span class="loading">Enter a URL and click Execute.</span>
+  </div>
+</div>
+<script>
+const TABS = [
+  { id: "screenshot", label: "Screenshot" },
+  { id: "pdf", label: "PDF" },
+  { id: "markdown", label: "Markdown" },
+  { id: "json", label: "JSON" },
+  { id: "scrape", label: "Scraper" },
+  { id: "links", label: "Links" },
+  { id: "content", label: "Content" },
+  { id: "snapshot", label: "Snapshot" },
+  { id: "crawl", label: "Crawl" },
+  { id: "session", label: "Session" },
+];
+
+let activeTab = "screenshot";
+let activeSessionId = null;
+let crawlJobId = null;
+let crawlTimer = null;
+
+const apiKeyEl = document.getElementById("apiKey");
+apiKeyEl.value = localStorage.getItem("brt_api_key") || "";
+apiKeyEl.addEventListener("input", () => localStorage.setItem("brt_api_key", apiKeyEl.value));
+
+const tabBar = document.getElementById("tabBar");
+const tabContent = document.getElementById("tabContent");
+const resultEl = document.getElementById("result");
+
+TABS.forEach(t => {
+  const btn = document.createElement("div");
+  btn.className = "tab" + (t.id === activeTab ? " active" : "");
+  btn.textContent = t.label;
+  btn.onclick = () => switchTab(t.id);
+  btn.dataset.id = t.id;
+  tabBar.appendChild(btn);
+});
+
+function switchTab(id) {
+  activeTab = id;
+  if (crawlTimer) { clearInterval(crawlTimer); crawlTimer = null; }
+  tabBar.querySelectorAll(".tab").forEach(el => el.classList.toggle("active", el.dataset.id === id));
+  renderTabContent();
+  resultEl.innerHTML = '<span class="loading">Enter a URL and click Execute.</span>';
+}
+
+function renderTabContent() {
+  if (activeTab === "session") { renderSessionPanel(); return; }
+  tabContent.innerHTML = renderForm();
+}
+
+function renderForm() {
+  const t = activeTab;
+  let h = '<div class="form-group"><label>URL</label><input id="inputUrl" type="url" placeholder="https://example.com" /></div>';
+
+  if (t === "screenshot") {
+    h += '<div class="form-row"><div class="form-group checkbox-row"><input type="checkbox" id="optFullPage" checked /><label for="optFullPage">Full page</label></div><div class="form-group"><label>Selector</label><input id="optSelector" placeholder="CSS selector (optional)" /></div></div>';
+  }
+  if (t === "pdf") {
+    h += '<div class="form-row"><div class="form-group"><label>Format</label><select id="optFormat"><option value="A4">A4</option><option value="Letter">Letter</option></select></div><div class="form-group checkbox-row"><input type="checkbox" id="optLandscape" /><label for="optLandscape">Landscape</label></div><div class="form-group checkbox-row"><input type="checkbox" id="optPrintBg" checked /><label for="optPrintBg">Print background</label></div></div>';
+  }
+  if (t === "json") {
+    h += '<div class="form-group"><label>AI Prompt</label><textarea id="optPrompt" placeholder="Extract product name, price, and description"></textarea></div><div class="form-group"><label>JSON Schema (optional)</label><textarea id="optSchema" placeholder=\'{"type":"object","properties":{...}}\'></textarea></div>';
+  }
+  if (t === "scrape") {
+    h += '<div class="form-group"><label>CSS Selectors (comma-separated)</label><input id="optSelectors" placeholder="h1, .price, a[href]" /></div>';
+  }
+  if (t === "links") {
+    h += '<div class="form-row"><div class="form-group checkbox-row"><input type="checkbox" id="optVisibleOnly" /><label for="optVisibleOnly">Visible only</label></div><div class="form-group checkbox-row"><input type="checkbox" id="optExcludeExt" /><label for="optExcludeExt">Exclude external</label></div></div>';
+  }
+  if (t === "crawl") {
+    h += '<div class="form-row"><div class="form-group"><label>Max pages</label><input id="optLimit" type="number" value="10" /></div><div class="form-group"><label>Depth</label><input id="optDepth" type="number" value="1" /></div></div><div class="form-group"><label>Include patterns (comma-separated)</label><input id="optInclude" placeholder="/docs/**" /></div><div class="form-group"><label>Exclude patterns (comma-separated)</label><input id="optExclude" placeholder="/admin/**" /></div><div class="form-group"><label>Formats</label><select id="optFormats" multiple><option value="html" selected>HTML</option><option value="markdown">Markdown</option><option value="json">JSON</option></select></div>';
+  }
+
+  h += '<div class="advanced-toggle" onclick="this.nextElementSibling.classList.toggle(\'open\');this.textContent=this.nextElementSibling.classList.contains(\'open\')?\'▼ Advanced Options\':\'▶ Advanced Options\'">▶ Advanced Options</div><div class="advanced"><div class="form-row"><div class="form-group"><label>Viewport Width</label><input id="advWidth" type="number" value="1280" /></div><div class="form-group"><label>Viewport Height</label><input id="advHeight" type="number" value="800" /></div></div><div class="form-group"><label>Wait for selector</label><input id="advWaitSelector" placeholder="CSS selector to wait for" /></div><div class="form-group"><label>Custom JS</label><textarea id="advJs" placeholder="document.querySelector(\'.btn\').click()"></textarea></div><div class="form-group"><label>Custom CSS</label><textarea id="advCss" placeholder="body { font-size: 16px; }"></textarea></div><div class="form-group"><label>Cookie string</label><input id="advCookies" placeholder="name=val; name2=val2" /></div><div class="form-group"><label>User-Agent</label><input id="advUA" placeholder="Custom user agent" /></div></div>';
+
+  h += '<button class="btn btn-primary" onclick="execute()" style="margin-top:12px">Execute</button>';
+  return h;
+}
+
+function renderSessionPanel() {
+  tabContent.innerHTML = `<div class="session-panel"><div class="session-header"><strong>Session: ${activeSessionId || "None"}</strong>${activeSessionId ? '<button class="btn btn-danger" onclick="closeSession()">Close</button>' : '<button class="btn btn-primary" onclick="createSession()">Create Session</button>'}</div>${activeSessionId ? '<div class="form-group"><label>Navigate to URL</label><input id="sessionUrl" placeholder="https://example.com" /></div><div class="session-actions"><button class="btn btn-primary" onclick="sessionNavigate()">Navigate</button><button class="btn btn-primary" onclick="sessionScreenshot()">Screenshot</button><button class="btn btn-primary" onclick="sessionPdf()">PDF</button></div><div class="form-group" style="margin-top:12px"><label>Evaluate JS</label><textarea id="sessionJs" placeholder="document.title"></textarea></div><div class="session-actions"><button class="btn btn-primary" onclick="sessionEvaluate()">Evaluate</button><button class="btn btn-primary" onclick="sessionStatus()">Status</button></div><div class="form-group" style="margin-top:12px"><label>Action</label><div class="session-actions"><select id="sessionActionType"><option value="click">Click</option><option value="fill">Fill</option><option value="type">Type</option><option value="wait">Wait</option></select><input id="sessionSelector" placeholder="CSS selector" style="width:200px" /><input id="sessionValue" placeholder="Value (for fill/type)" style="width:200px" /><button class="btn btn-primary" onclick="sessionAction()">Run</button></div></div>' : '<p style="color:var(--muted)">Create a session to start a persistent browser.</p>'}</div>`;
+}
+
+async function apiFetch(path, options = {}) {
+  const key = apiKeyEl.value;
+  const headers = { ...(options.headers || {}), "Content-Type": "application/json" };
+  if (key) headers["Authorization"] = `Bearer ${key}`;
+  return fetch(path, { ...options, headers });
+}
+
+function getAdvancedOptions() {
+  const opts = {};
+  const w = document.getElementById("advWidth");
+  const h = document.getElementById("advHeight");
+  if (w && h) opts.viewport = { width: parseInt(w.value) || 1280, height: parseInt(h.value) || 800 };
+  const ws = document.getElementById("advWaitSelector");
+  if (ws && ws.value) opts.waitForSelector = { selector: ws.value, timeout: 10000 };
+  const js = document.getElementById("advJs");
+  if (js && js.value) opts.addScriptTag = [{ content: js.value }];
+  const css = document.getElementById("advCss");
+  if (css && css.value) opts.addStyleTag = [{ content: css.value }];
+  const cookies = document.getElementById("advCookies");
+  if (cookies && cookies.value) {
+    opts.cookies = cookies.value.split(";").map(c => { const [n, ...v] = c.trim().split("="); return { name: n, value: v.join("="), domain: "" }; });
+  }
+  const ua = document.getElementById("advUA");
+  if (ua && ua.value) opts.userAgent = ua.value;
+  return opts;
+}
+
+async function execute() {
+  if (activeTab === "session") return;
+  const url = document.getElementById("inputUrl")?.value;
+  if (!url) { resultEl.innerHTML = "Please enter a URL."; return; }
+
+  const body = { url, ...getAdvancedOptions() };
+
+  if (activeTab === "screenshot") {
+    body.screenshotOptions = {};
+    const fp = document.getElementById("optFullPage");
+    if (fp) body.screenshotOptions.fullPage = fp.checked;
+    const sel = document.getElementById("optSelector");
+    if (sel && sel.value) body.screenshotOptions.selector = sel.value;
+  }
+  if (activeTab === "pdf") {
+    body.pdfOptions = {};
+    const fmt = document.getElementById("optFormat");
+    if (fmt) body.pdfOptions.format = fmt.value;
+    const ls = document.getElementById("optLandscape");
+    if (ls) body.pdfOptions.landscape = ls.checked;
+    const pb = document.getElementById("optPrintBg");
+    if (pb) body.pdfOptions.printBackground = pb.checked;
+  }
+  if (activeTab === "json") {
+    const p = document.getElementById("optPrompt");
+    if (p && p.value) body.prompt = p.value;
+    const s = document.getElementById("optSchema");
+    if (s && s.value) { try { body.response_format = { type: "json_schema", schema: JSON.parse(s.value) }; } catch(e) { resultEl.innerHTML = `<span style="color:var(--error)">Invalid JSON Schema: ${e.message}</span>`; return; } }
+  }
+  if (activeTab === "scrape") {
+    const s = document.getElementById("optSelectors");
+    if (s && s.value) body.elements = s.value.split(",").map(sel => ({ selector: sel.trim() }));
+  }
+  if (activeTab === "links") {
+    const v = document.getElementById("optVisibleOnly");
+    if (v) body.visibleLinksOnly = v.checked;
+    const e = document.getElementById("optExcludeExt");
+    if (e) body.excludeExternalLinks = e.checked;
+  }
+  if (activeTab === "crawl") {
+    const lim = document.getElementById("optLimit");
+    if (lim) body.limit = parseInt(lim.value) || 10;
+    const dep = document.getElementById("optDepth");
+    if (dep) body.depth = parseInt(dep.value) || 1;
+    const inc = document.getElementById("optInclude");
+    if (inc && inc.value) { body.options = body.options || {}; body.options.includePatterns = inc.value.split(",").map(s => s.trim()); }
+    const exc = document.getElementById("optExclude");
+    if (exc && exc.value) { body.options = body.options || {}; body.options.excludePatterns = exc.value.split(",").map(s => s.trim()); }
+    const fmts = document.getElementById("optFormats");
+    if (fmts) body.formats = Array.from(fmts.selectedOptions).map(o => o.value);
+  }
+
+  resultEl.innerHTML = '<span class="loading">Loading...</span>';
+  try {
+    const resp = await apiFetch(`/api/${activeTab}`, { method: "POST", body: JSON.stringify(body) });
+    if (activeTab === "crawl") {
+      const data = await resp.json();
+      if (resp.ok && data.result) {
+        crawlJobId = data.result;
+        resultEl.innerHTML = `<pre>Crawl started. Job ID: ${crawlJobId}</pre>`;
+        pollCrawlStatus();
+      } else {
+        resultEl.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+      }
+    } else {
+      await displayResult(resp, activeTab);
+    }
+  } catch (err) {
+    resultEl.innerHTML = `<span style="color:var(--error)">Error: ${err.message}</span>`;
+  }
+}
+
+function pollCrawlStatus() {
+  if (crawlTimer) clearInterval(crawlTimer);
+  crawlTimer = setInterval(async () => {
+    try {
+      const resp = await apiFetch(`/api/crawl/${crawlJobId}`);
+      const data = await resp.json();
+      const status = data.result?.status || data.status || "unknown";
+      const finished = data.result?.finished || 0;
+      const total = data.result?.total || 0;
+      resultEl.innerHTML = `<pre>Crawl: ${status}\nPages: ${finished}/${total}\n\n${JSON.stringify(data, null, 2).substring(0, 2000)}</pre>`;
+      if (["completed", "cancelled_due_to_timeout", "cancelled_due_to_limits", "cancelled_by_user", "errored"].includes(status)) {
+        clearInterval(crawlTimer);
+        crawlTimer = null;
+      }
+    } catch (err) {
+      resultEl.innerHTML = `<span style="color:var(--error)">Poll error: ${err.message}</span>`;
+      clearInterval(crawlTimer);
+      crawlTimer = null;
+    }
+  }, 3000);
+}
+
+async function displayResult(resp, tab) {
+  const ct = resp.headers.get("Content-Type") || "";
+  if (ct.includes("image")) {
+    const blob = await resp.blob();
+    resultEl.innerHTML = `<img src="${URL.createObjectURL(blob)}" />`;
+  } else if (ct.includes("pdf")) {
+    const blob = await resp.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "output.pdf";
+    a.textContent = "Download PDF";
+    resultEl.innerHTML = "";
+    resultEl.appendChild(a);
+  } else {
+    const text = await resp.text();
+    try {
+      const json = JSON.parse(text);
+      if (tab === "markdown" && json.result) {
+        resultEl.innerHTML = `<pre>${json.result}</pre>`;
+      } else if (tab === "content" && json.result) {
+        resultEl.innerHTML = `<pre>${json.result.substring(0, 5000)}</pre>`;
+      } else {
+        resultEl.innerHTML = `<pre>${JSON.stringify(json, null, 2)}</pre>`;
+      }
+    } catch {
+      resultEl.innerHTML = `<pre>${text}</pre>`;
+    }
+  }
+}
+
+async function createSession() {
+  resultEl.innerHTML = '<span class="loading">Creating session...</span>';
+  const resp = await apiFetch("/api/session", { method: "POST" });
+  const data = await resp.json();
+  if (resp.ok) {
+    activeSessionId = data.sessionId;
+    renderSessionPanel();
+    resultEl.innerHTML = `<pre>Session created: ${activeSessionId}</pre>`;
+  } else {
+    resultEl.innerHTML = `<span style="color:var(--error)">Error: ${JSON.stringify(data)}</span>`;
+  }
+}
+
+async function closeSession() {
+  if (!activeSessionId) return;
+  await apiFetch(`/api/session/${activeSessionId}`, { method: "DELETE" });
+  activeSessionId = null;
+  renderSessionPanel();
+  resultEl.innerHTML = "Session closed.";
+}
+
+async function sessionNavigate() {
+  const url = document.getElementById("sessionUrl").value;
+  resultEl.innerHTML = '<span class="loading">Navigating...</span>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/navigate`, { method: "POST", body: JSON.stringify({ url }) });
+  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
+}
+
+async function sessionScreenshot() {
+  resultEl.innerHTML = '<span class="loading">Taking screenshot...</span>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/screenshot`, { method: "POST", body: JSON.stringify({}) });
+  await displayResult(resp, "screenshot");
+}
+
+async function sessionPdf() {
+  resultEl.innerHTML = '<span class="loading">Generating PDF...</span>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/pdf`, { method: "POST", body: JSON.stringify({}) });
+  await displayResult(resp, "pdf");
+}
+
+async function sessionEvaluate() {
+  const expression = document.getElementById("sessionJs").value;
+  resultEl.innerHTML = '<span class="loading">Evaluating...</span>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/evaluate`, { method: "POST", body: JSON.stringify({ expression }) });
+  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
+}
+
+async function sessionAction() {
+  const type = document.getElementById("sessionActionType").value;
+  const selector = document.getElementById("sessionSelector").value;
+  const value = document.getElementById("sessionValue").value;
+  resultEl.innerHTML = '<span class="loading">Running action...</span>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/action`, { method: "POST", body: JSON.stringify({ type, selector, value }) });
+  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
+}
+
+async function sessionStatus() {
+  const resp = await apiFetch(`/api/session/${activeSessionId}`);
+  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
+}
+
+renderTabContent();
+</script>
+</body>
+</html>
