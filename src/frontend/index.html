@@ -4,78 +4,243 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Browser Run Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --accent-hover: #2563eb; --success: #22c55e; --error: #ef4444; }
+  :root {
+    --bg: #0F172A; --surface: #1E293B; --surface-2: #263548; --border: #334155;
+    --text: #F8FAFC; --text-2: #CBD5E1; --muted: #64748B;
+    --accent: #3B82F6; --accent-hover: #2563EB; --accent-soft: rgba(59,130,246,0.12);
+    --green: #22C55E; --green-soft: rgba(34,197,94,0.12);
+    --red: #EF4444; --red-soft: rgba(239,68,68,0.12);
+    --yellow: #F59E0B; --yellow-soft: rgba(245,158,11,0.12);
+    --purple: #A855F7;
+    --radius: 10px; --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-  .container { max-width: 960px; margin: 0 auto; padding: 16px; }
-  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
-  .topbar h1 { font-size: 18px; font-weight: 600; }
-  .topbar input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; width: 320px; font-size: 13px; }
-  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; }
-  .tab { padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); transition: all .15s; }
-  .tab:hover { color: var(--text); border-color: var(--accent); }
-  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .form-group { margin-bottom: 12px; }
-  .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-  .form-group input, .form-group textarea, .form-group select { width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 14px; }
-  .form-group textarea { font-family: monospace; min-height: 60px; resize: vertical; }
-  .form-group select[multiple] { min-height: 60px; }
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+    line-height: 1.6; font-size: 14px;
+  }
+
+  /* ---- Navbar ---- */
+  .navbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(15,23,42,0.85); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border); padding: 0 24px;
+  }
+  .navbar-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; justify-content: space-between; align-items: center; height: 56px;
+  }
+  .navbar-brand { display: flex; align-items: center; gap: 10px; }
+  .navbar-brand svg { width: 28px; height: 28px; }
+  .navbar-brand h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+  .navbar-brand span { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 4px; }
+  .key-input {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 14px; border-radius: var(--radius-sm); width: 280px; font-size: 13px;
+    font-family: inherit; transition: border-color 0.2s;
+  }
+  .key-input:focus { outline: none; border-color: var(--accent); }
+  .key-input::placeholder { color: var(--muted); }
+
+  /* ---- Main layout ---- */
+  .main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+  /* ---- Tab bar ---- */
+  .tab-bar {
+    display: flex; gap: 4px; margin-bottom: 24px;
+    border-bottom: 1px solid var(--border); padding-bottom: 0;
+  }
+  .tab-group { display: flex; gap: 2px; }
+  .tab-group + .tab-group { margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .tab-btn {
+    padding: 8px 16px; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    cursor: pointer; font-size: 13px; font-weight: 500;
+    background: transparent; border: none; color: var(--muted);
+    transition: all 0.15s; position: relative; font-family: inherit;
+  }
+  .tab-btn:hover { color: var(--text-2); background: var(--accent-soft); }
+  .tab-btn.active { color: var(--accent); background: var(--accent-soft); }
+  .tab-btn.active::after {
+    content: ''; position: absolute; bottom: -1px; left: 0; right: 0;
+    height: 2px; background: var(--accent); border-radius: 2px 2px 0 0;
+  }
+
+  /* ---- Card ---- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+  }
+
+  /* ---- Form ---- */
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--text-2);
+    margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .form-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 14px; border-radius: var(--radius-sm);
+    font-size: 14px; font-family: inherit; transition: border-color 0.2s;
+  }
+  .form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  textarea.form-input { font-family: 'SF Mono', 'Fira Code', monospace; min-height: 72px; resize: vertical; font-size: 13px; }
+  select.form-input { cursor: pointer; }
+  select.form-input[multiple] { min-height: 72px; }
   .form-row { display: flex; gap: 12px; }
-  .form-row .form-group { flex: 1; }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; }
-  .checkbox-row input[type="checkbox"] { accent-color: var(--accent); }
-  .advanced-toggle { cursor: pointer; color: var(--muted); font-size: 12px; margin-bottom: 8px; user-select: none; }
-  .advanced-toggle:hover { color: var(--text); }
-  .advanced { display: none; }
-  .advanced.open { display: block; }
-  .btn { padding: 10px 24px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: background .15s; }
+  .form-row > * { flex: 1; }
+
+  .checkbox-label {
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer; font-size: 13px; color: var(--text-2);
+    padding: 8px 0;
+  }
+  .checkbox-label input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+
+  /* ---- Advanced toggle ---- */
+  .adv-toggle {
+    display: flex; align-items: center; gap: 6px;
+    cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 600;
+    padding: 8px 0; user-select: none; text-transform: uppercase; letter-spacing: 0.04em;
+    border: none; background: none; font-family: inherit;
+  }
+  .adv-toggle:hover { color: var(--text-2); }
+  .adv-toggle svg { transition: transform 0.2s; width: 14px; height: 14px; }
+  .adv-toggle.open svg { transform: rotate(90deg); }
+  .adv-panel { display: none; }
+  .adv-panel.open { display: block; padding-top: 4px; }
+
+  /* ---- Buttons ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 9px 20px; border-radius: var(--radius-sm); border: none;
+    cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: all 0.15s; font-family: inherit;
+  }
+  .btn svg { width: 16px; height: 16px; }
   .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: var(--accent-hover); }
-  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-  .btn-danger { background: var(--error); color: #fff; }
-  .btn-danger:hover { opacity: .9; }
-  .result { margin-top: 20px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; min-height: 80px; }
-  .result img { max-width: 100%; border-radius: 4px; }
-  .result pre { white-space: pre-wrap; word-break: break-all; font-size: 13px; max-height: 500px; overflow-y: auto; }
-  .result .loading { color: var(--muted); }
-  .session-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-  .session-panel .session-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .session-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-  .session-actions input, .session-actions select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 4px; font-size: 13px; }
-  .session-actions .btn { padding: 6px 14px; font-size: 13px; }
+  .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-ghost { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--border); color: var(--text); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { opacity: 0.9; }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-green:hover { opacity: 0.9; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .execute-row { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
+
+  /* ---- Result ---- */
+  .result-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .result-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+  }
+  .result-header span { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .result-header .result-actions { display: flex; gap: 6px; }
+  .result-body { padding: 20px; min-height: 100px; position: relative; }
+  .result-body img { max-width: 100%; border-radius: var(--radius-sm); display: block; margin: 0 auto; }
+  .result-body pre {
+    white-space: pre-wrap; word-break: break-all; font-size: 13px;
+    font-family: 'SF Mono', 'Fira Code', monospace; line-height: 1.7;
+    max-height: 520px; overflow-y: auto; color: var(--text-2);
+  }
+  .result-body pre::-webkit-scrollbar { width: 6px; }
+  .result-body pre::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .result-empty { color: var(--muted); font-size: 14px; text-align: center; padding: 40px 0; }
+  .result-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+  .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- Session panel ---- */
+  .session-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .session-status { display: flex; align-items: center; gap: 8px; }
+  .session-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .session-dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .session-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .session-grid .full { grid-column: 1 / -1; }
+  .action-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* ---- Status badge ---- */
+  .badge {
+    display: inline-flex; align-items: center; padding: 3px 10px;
+    border-radius: 999px; font-size: 11px; font-weight: 600;
+  }
+  .badge-green { background: var(--green-soft); color: var(--green); }
+  .badge-yellow { background: var(--yellow-soft); color: var(--yellow); }
+  .badge-red { background: var(--red-soft); color: var(--red); }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 768px) {
+    .navbar-inner { flex-direction: column; height: auto; padding: 12px 0; gap: 10px; }
+    .key-input { width: 100%; }
+    .form-row { flex-direction: column; }
+    .session-grid { grid-template-columns: 1fr; }
+    .tab-bar { overflow-x: auto; flex-wrap: nowrap; }
+    .tab-group + .tab-group { margin-left: 8px; padding-left: 8px; }
+  }
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="topbar">
-    <h1>Browser Run Toolkit</h1>
-    <input type="password" id="apiKey" placeholder="Enter API Key (saved locally)" />
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <div class="navbar-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <h1>Browser Run Toolkit</h1>
+      <span>v1.0</span>
+    </div>
+    <input class="key-input" type="password" id="apiKey" placeholder="Enter API Key (saved locally)" />
   </div>
-  <div class="tabs" id="tabBar"></div>
+</nav>
+
+<div class="main">
+  <div class="tab-bar" id="tabBar"></div>
   <div id="tabContent"></div>
-  <div class="result" id="result">
-    <span class="loading">Enter a URL and click Execute.</span>
+  <div class="result-card">
+    <div class="result-header">
+      <span>Result</span>
+      <div class="result-actions" id="resultActions"></div>
+    </div>
+    <div class="result-body" id="result">
+      <div class="result-empty">Enter a URL and click Execute</div>
+    </div>
   </div>
 </div>
+
 <script>
 const TABS = [
-  { id: "screenshot", label: "Screenshot" },
-  { id: "pdf", label: "PDF" },
-  { id: "markdown", label: "Markdown" },
-  { id: "json", label: "JSON" },
-  { id: "scrape", label: "Scraper" },
-  { id: "links", label: "Links" },
-  { id: "content", label: "Content" },
-  { id: "snapshot", label: "Snapshot" },
-  { id: "crawl", label: "Crawl" },
-  { id: "session", label: "Session" },
+  { group: "Capture", items: [
+    { id: "screenshot", label: "Screenshot" },
+    { id: "pdf", label: "PDF" },
+  ]},
+  { group: "Extract", items: [
+    { id: "markdown", label: "Markdown" },
+    { id: "json", label: "AI / JSON" },
+    { id: "scrape", label: "Scraper" },
+    { id: "links", label: "Links" },
+    { id: "content", label: "Content" },
+    { id: "snapshot", label: "Snapshot" },
+  ]},
+  { group: "Advanced", items: [
+    { id: "crawl", label: "Crawl" },
+    { id: "session", label: "Session" },
+  ]},
 ];
 
 let activeTab = "screenshot";
 let activeSessionId = null;
 let crawlJobId = null;
 let crawlTimer = null;
+let lastBlob = null;
+let lastFilename = "";
 
 const apiKeyEl = document.getElementById("apiKey");
 apiKeyEl.value = localStorage.getItem("brt_api_key") || "";
@@ -84,22 +249,31 @@ apiKeyEl.addEventListener("input", () => localStorage.setItem("brt_api_key", api
 const tabBar = document.getElementById("tabBar");
 const tabContent = document.getElementById("tabContent");
 const resultEl = document.getElementById("result");
+const resultActions = document.getElementById("resultActions");
 
-TABS.forEach(t => {
-  const btn = document.createElement("div");
-  btn.className = "tab" + (t.id === activeTab ? " active" : "");
-  btn.textContent = t.label;
-  btn.onclick = () => switchTab(t.id);
-  btn.dataset.id = t.id;
-  tabBar.appendChild(btn);
+// Build tabs
+TABS.forEach(g => {
+  const group = document.createElement("div");
+  group.className = "tab-group";
+  g.items.forEach(t => {
+    const btn = document.createElement("button");
+    btn.className = "tab-btn" + (t.id === activeTab ? " active" : "");
+    btn.textContent = t.label;
+    btn.dataset.id = t.id;
+    btn.onclick = () => switchTab(t.id);
+    group.appendChild(btn);
+  });
+  tabBar.appendChild(group);
 });
 
 function switchTab(id) {
   activeTab = id;
   if (crawlTimer) { clearInterval(crawlTimer); crawlTimer = null; }
-  tabBar.querySelectorAll(".tab").forEach(el => el.classList.toggle("active", el.dataset.id === id));
+  tabBar.querySelectorAll(".tab-btn").forEach(el => el.classList.toggle("active", el.dataset.id === id));
   renderTabContent();
-  resultEl.innerHTML = '<span class="loading">Enter a URL and click Execute.</span>';
+  resultEl.innerHTML = '<div class="result-empty">Enter a URL and click Execute</div>';
+  resultActions.innerHTML = "";
+  lastBlob = null;
 }
 
 function renderTabContent() {
@@ -109,37 +283,82 @@ function renderTabContent() {
 
 function renderForm() {
   const t = activeTab;
-  let h = '<div class="form-group"><label>URL</label><input id="inputUrl" type="url" placeholder="https://example.com" /></div>';
+  let h = '<div class="card"><div class="form-group"><label>URL</label><input id="inputUrl" class="form-input" type="url" placeholder="https://example.com" /></div>';
 
   if (t === "screenshot") {
-    h += '<div class="form-row"><div class="form-group checkbox-row"><input type="checkbox" id="optFullPage" checked /><label for="optFullPage">Full page</label></div><div class="form-group"><label>Selector</label><input id="optSelector" placeholder="CSS selector (optional)" /></div></div>';
+    h += '<div class="form-row"><label class="checkbox-label"><input type="checkbox" id="optFullPage" checked />Full page screenshot</label></div>';
+    h += '<div class="form-group" style="margin-top:8px"><label>Element Selector (optional)</label><input id="optSelector" class="form-input" placeholder=".hero, #content" /></div>';
   }
   if (t === "pdf") {
-    h += '<div class="form-row"><div class="form-group"><label>Format</label><select id="optFormat"><option value="A4">A4</option><option value="Letter">Letter</option></select></div><div class="form-group checkbox-row"><input type="checkbox" id="optLandscape" /><label for="optLandscape">Landscape</label></div><div class="form-group checkbox-row"><input type="checkbox" id="optPrintBg" checked /><label for="optPrintBg">Print background</label></div></div>';
+    h += '<div class="form-row"><div class="form-group"><label>Format</label><select id="optFormat" class="form-input"><option value="A4">A4</option><option value="Letter">Letter</option></select></div><div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end"><label class="checkbox-label"><input type="checkbox" id="optLandscape" />Landscape</label><label class="checkbox-label"><input type="checkbox" id="optPrintBg" checked />Print background</label></div></div>';
   }
   if (t === "json") {
-    h += '<div class="form-group"><label>AI Prompt</label><textarea id="optPrompt" placeholder="Extract product name, price, and description"></textarea></div><div class="form-group"><label>JSON Schema (optional)</label><textarea id="optSchema" placeholder=\'{"type":"object","properties":{...}}\'></textarea></div>';
+    h += '<div class="form-group"><label>AI Prompt</label><textarea id="optPrompt" class="form-input" placeholder="Extract product name, price, and description"></textarea></div>';
+    h += '<div class="form-group"><label>JSON Schema (optional)</label><textarea id="optSchema" class="form-input" placeholder=\'{"type":"object","properties":{...}}\'></textarea></div>';
   }
   if (t === "scrape") {
-    h += '<div class="form-group"><label>CSS Selectors (comma-separated)</label><input id="optSelectors" placeholder="h1, .price, a[href]" /></div>';
+    h += '<div class="form-group"><label>CSS Selectors (comma-separated)</label><input id="optSelectors" class="form-input" placeholder="h1, .price, a[href]" /></div>';
   }
   if (t === "links") {
-    h += '<div class="form-row"><div class="form-group checkbox-row"><input type="checkbox" id="optVisibleOnly" /><label for="optVisibleOnly">Visible only</label></div><div class="form-group checkbox-row"><input type="checkbox" id="optExcludeExt" /><label for="optExcludeExt">Exclude external</label></div></div>';
+    h += '<div class="form-row"><label class="checkbox-label"><input type="checkbox" id="optVisibleOnly" />Visible links only</label><label class="checkbox-label"><input type="checkbox" id="optExcludeExt" />Exclude external links</label></div>';
   }
   if (t === "crawl") {
-    h += '<div class="form-row"><div class="form-group"><label>Max pages</label><input id="optLimit" type="number" value="10" /></div><div class="form-group"><label>Depth</label><input id="optDepth" type="number" value="1" /></div></div><div class="form-group"><label>Include patterns (comma-separated)</label><input id="optInclude" placeholder="/docs/**" /></div><div class="form-group"><label>Exclude patterns (comma-separated)</label><input id="optExclude" placeholder="/admin/**" /></div><div class="form-group"><label>Formats</label><select id="optFormats" multiple><option value="html" selected>HTML</option><option value="markdown">Markdown</option><option value="json">JSON</option></select></div>';
+    h += '<div class="form-row"><div class="form-group"><label>Max pages</label><input id="optLimit" class="form-input" type="number" value="10" /></div><div class="form-group"><label>Depth</label><input id="optDepth" class="form-input" type="number" value="1" /></div></div>';
+    h += '<div class="form-group"><label>Include patterns</label><input id="optInclude" class="form-input" placeholder="/docs/**" /></div>';
+    h += '<div class="form-group"><label>Exclude patterns</label><input id="optExclude" class="form-input" placeholder="/admin/**" /></div>';
+    h += '<div class="form-group"><label>Formats</label><select id="optFormats" class="form-input" multiple><option value="html" selected>HTML</option><option value="markdown">Markdown</option><option value="json">JSON</option></select></div>';
   }
 
-  h += '<div class="advanced-toggle" onclick="this.nextElementSibling.classList.toggle(\'open\');this.textContent=this.nextElementSibling.classList.contains(\'open\')?\'▼ Advanced Options\':\'▶ Advanced Options\'">▶ Advanced Options</div><div class="advanced"><div class="form-row"><div class="form-group"><label>Viewport Width</label><input id="advWidth" type="number" value="1280" /></div><div class="form-group"><label>Viewport Height</label><input id="advHeight" type="number" value="800" /></div></div><div class="form-group"><label>Wait for selector</label><input id="advWaitSelector" placeholder="CSS selector to wait for" /></div><div class="form-group"><label>Custom JS</label><textarea id="advJs" placeholder="document.querySelector(\'.btn\').click()"></textarea></div><div class="form-group"><label>Custom CSS</label><textarea id="advCss" placeholder="body { font-size: 16px; }"></textarea></div><div class="form-group"><label>Cookie string</label><input id="advCookies" placeholder="name=val; name2=val2" /></div><div class="form-group"><label>User-Agent</label><input id="advUA" placeholder="Custom user agent" /></div></div>';
+  // Advanced
+  h += `<button class="adv-toggle" onclick="toggleAdv(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>Advanced Options</button>`;
+  h += '<div class="adv-panel">';
+  h += '<div class="form-row"><div class="form-group"><label>Viewport Width</label><input id="advWidth" class="form-input" type="number" value="1280" /></div><div class="form-group"><label>Viewport Height</label><input id="advHeight" class="form-input" type="number" value="800" /></div></div>';
+  h += '<div class="form-group"><label>Wait for selector</label><input id="advWaitSelector" class="form-input" placeholder="CSS selector to wait for" /></div>';
+  h += '<div class="form-group"><label>Custom JS</label><textarea id="advJs" class="form-input" placeholder="document.querySelector('.btn').click()"></textarea></div>';
+  h += '<div class="form-group"><label>Custom CSS</label><textarea id="advCss" class="form-input" placeholder="body { font-size: 16px; }"></textarea></div>';
+  h += '<div class="form-group"><label>Cookies</label><input id="advCookies" class="form-input" placeholder="name=val; name2=val2" /></div>';
+  h += '<div class="form-group"><label>User-Agent</label><input id="advUA" class="form-input" placeholder="Custom user agent" /></div>';
+  h += '</div>';
 
-  h += '<button class="btn btn-primary" onclick="execute()" style="margin-top:12px">Execute</button>';
+  h += `<div class="execute-row"><button class="btn btn-primary" id="execBtn" onclick="execute()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Execute</button><span id="execStatus" style="color:var(--muted);font-size:12px"></span></div>`;
+  h += '</div>';
   return h;
 }
 
-function renderSessionPanel() {
-  tabContent.innerHTML = `<div class="session-panel"><div class="session-header"><strong>Session: ${activeSessionId || "None"}</strong>${activeSessionId ? '<button class="btn btn-danger" onclick="closeSession()">Close</button>' : '<button class="btn btn-primary" onclick="createSession()">Create Session</button>'}</div>${activeSessionId ? '<div class="form-group"><label>Navigate to URL</label><input id="sessionUrl" placeholder="https://example.com" /></div><div class="session-actions"><button class="btn btn-primary" onclick="sessionNavigate()">Navigate</button><button class="btn btn-primary" onclick="sessionScreenshot()">Screenshot</button><button class="btn btn-primary" onclick="sessionPdf()">PDF</button></div><div class="form-group" style="margin-top:12px"><label>Evaluate JS</label><textarea id="sessionJs" placeholder="document.title"></textarea></div><div class="session-actions"><button class="btn btn-primary" onclick="sessionEvaluate()">Evaluate</button><button class="btn btn-primary" onclick="sessionStatus()">Status</button></div><div class="form-group" style="margin-top:12px"><label>Action</label><div class="session-actions"><select id="sessionActionType"><option value="click">Click</option><option value="fill">Fill</option><option value="type">Type</option><option value="wait">Wait</option></select><input id="sessionSelector" placeholder="CSS selector" style="width:200px" /><input id="sessionValue" placeholder="Value (for fill/type)" style="width:200px" /><button class="btn btn-primary" onclick="sessionAction()">Run</button></div></div>' : '<p style="color:var(--muted)">Create a session to start a persistent browser.</p>'}</div>`;
+function toggleAdv(el) {
+  el.classList.toggle("open");
+  el.nextElementSibling.classList.toggle("open");
 }
 
+function renderSessionPanel() {
+  const active = !!activeSessionId;
+  tabContent.innerHTML = `<div class="card">
+    <div class="session-header">
+      <div class="session-status">
+        <div class="session-dot ${active ? 'active' : ''}"></div>
+        <strong>${active ? activeSessionId.substring(0,8) + '...' : 'No active session'}</strong>
+      </div>
+      ${active ? '<button class="btn btn-danger btn-sm" onclick="closeSession()">Close Session</button>' : '<button class="btn btn-green btn-sm" onclick="createSession()">Create Session</button>'}
+    </div>
+    ${active ? `
+    <div class="session-grid">
+      <div class="full form-group"><label>Navigate to URL</label><input id="sessionUrl" class="form-input" placeholder="https://example.com" /></div>
+      <div class="full action-bar">
+        <button class="btn btn-primary btn-sm" onclick="sessionNavigate()">Navigate</button>
+        <button class="btn btn-ghost btn-sm" onclick="sessionScreenshot()">Screenshot</button>
+        <button class="btn btn-ghost btn-sm" onclick="sessionPdf()">PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="sessionStatus()">Status</button>
+      </div>
+      <div class="full form-group"><label>Evaluate JavaScript</label><textarea id="sessionJs" class="form-input" placeholder="document.title"></textarea></div>
+      <div class="full action-bar"><button class="btn btn-primary btn-sm" onclick="sessionEvaluate()">Evaluate</button></div>
+      <div class="full form-group"><label>Browser Action</label></div>
+      <div class="form-group"><select id="sessionActionType" class="form-input"><option value="click">Click</option><option value="fill">Fill</option><option value="type">Type</option><option value="wait">Wait</option></select></div>
+      <div class="form-group"><div style="display:flex;gap:6px"><input id="sessionSelector" class="form-input" placeholder="CSS selector" /><input id="sessionValue" class="form-input" placeholder="Value" style="max-width:140px" /><button class="btn btn-primary btn-sm" onclick="sessionAction()">Run</button></div></div>
+    </div>` : '<p style="color:var(--muted);padding:16px 0;text-align:center">Create a session to start a persistent browser instance with state preserved across requests.</p>'}
+  </div>`;
+}
+
+// ---- API helpers ----
 async function apiFetch(path, options = {}) {
   const key = apiKeyEl.value;
   const headers = { ...(options.headers || {}) };
@@ -152,8 +371,7 @@ async function apiFetch(path, options = {}) {
 
 function getAdvancedOptions() {
   const opts = {};
-  const w = document.getElementById("advWidth");
-  const h = document.getElementById("advHeight");
+  const w = document.getElementById("advWidth"), h = document.getElementById("advHeight");
   if (w && h) opts.viewport = { width: parseInt(w.value) || 1280, height: parseInt(h.value) || 800 };
   const ws = document.getElementById("advWaitSelector");
   if (ws && ws.value) opts.waitForSelector = { selector: ws.value, timeout: 10000 };
@@ -163,17 +381,39 @@ function getAdvancedOptions() {
   if (css && css.value) opts.addStyleTag = [{ content: css.value }];
   const cookies = document.getElementById("advCookies");
   if (cookies && cookies.value) {
-    opts.cookies = cookies.value.split(";").map(c => { const [n, ...v] = c.trim().split("="); return { name: n, value: v.join("=") }; });
+    opts.cookies = cookies.value.split(";").map(c => { const [n,...v] = c.trim().split("="); return { name: n, value: v.join("=") }; });
   }
   const ua = document.getElementById("advUA");
   if (ua && ua.value) opts.userAgent = ua.value;
   return opts;
 }
 
+// ---- Download helper ----
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function setResultActions(actions) {
+  resultActions.innerHTML = "";
+  actions.forEach(a => {
+    const btn = document.createElement("button");
+    btn.className = `btn btn-sm ${a.cls || 'btn-ghost'}`;
+    btn.innerHTML = a.label;
+    btn.onclick = a.fn;
+    resultActions.appendChild(btn);
+  });
+}
+
+// ---- Execute ----
 async function execute() {
   if (activeTab === "session") return;
   const url = document.getElementById("inputUrl")?.value;
-  if (!url) { resultEl.innerHTML = "Please enter a URL."; return; }
+  if (!url) { resultEl.innerHTML = '<div class="result-empty" style="color:var(--yellow)">Please enter a URL</div>'; return; }
 
   const body = { url, ...getAdvancedOptions() };
 
@@ -197,7 +437,10 @@ async function execute() {
     const p = document.getElementById("optPrompt");
     if (p && p.value) body.prompt = p.value;
     const s = document.getElementById("optSchema");
-    if (s && s.value) { try { body.response_format = { type: "json_schema", schema: JSON.parse(s.value) }; } catch(e) { resultEl.innerHTML = `<span style="color:var(--error)">Invalid JSON Schema: ${e.message}</span>`; return; } }
+    if (s && s.value) {
+      try { body.response_format = { type: "json_schema", schema: JSON.parse(s.value) }; }
+      catch(e) { resultEl.innerHTML = `<div style="color:var(--red)">Invalid JSON Schema: ${e.message}</div>`; return; }
+    }
   }
   if (activeTab === "scrape") {
     const s = document.getElementById("optSelectors");
@@ -222,14 +465,22 @@ async function execute() {
     if (fmts) body.formats = Array.from(fmts.selectedOptions).map(o => o.value);
   }
 
-  resultEl.innerHTML = '<span class="loading">Loading...</span>';
+  const btn = document.getElementById("execBtn");
+  btn.disabled = true;
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Loading...</div>';
+  setResultActions([]);
+
   try {
     const resp = await apiFetch(`/api/${activeTab}`, { method: "POST", body: JSON.stringify(body) });
+    const ms = resp.headers.get("X-Browser-Ms-Used");
+    const statusEl = document.getElementById("execStatus");
+    if (ms && statusEl) statusEl.textContent = `${ms}ms browser time`;
+
     if (activeTab === "crawl") {
       const data = await resp.json();
       if (resp.ok && data.result) {
         crawlJobId = data.result;
-        resultEl.innerHTML = `<pre>Crawl started. Job ID: ${crawlJobId}</pre>`;
+        resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Crawling... checking status</div>';
         pollCrawlStatus();
       } else {
         resultEl.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
@@ -238,7 +489,9 @@ async function execute() {
       await displayResult(resp, activeTab);
     }
   } catch (err) {
-    resultEl.innerHTML = `<span style="color:var(--error)">Error: ${err.message}</span>`;
+    resultEl.innerHTML = `<div style="color:var(--red)">Error: ${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -251,42 +504,56 @@ function pollCrawlStatus() {
       const status = data.result?.status || data.status || "unknown";
       const finished = data.result?.finished || 0;
       const total = data.result?.total || 0;
-      resultEl.innerHTML = `<pre>Crawl: ${status}\nPages: ${finished}/${total}\n\n${JSON.stringify(data, null, 2).substring(0, 2000)}</pre>`;
-      if (["completed", "cancelled_due_to_timeout", "cancelled_due_to_limits", "cancelled_by_user", "errored"].includes(status)) {
-        clearInterval(crawlTimer);
-        crawlTimer = null;
+      const statusBadge = status === "completed" ? '<span class="badge badge-green">completed</span>'
+        : status === "running" ? '<span class="badge badge-yellow">running</span>'
+        : status.includes("cancel") || status === "errored" ? `<span class="badge badge-red">${status}</span>`
+        : `<span class="badge">${status}</span>`;
+      resultEl.innerHTML = `<div style="margin-bottom:12px">${statusBadge} &nbsp; Pages: ${finished}/${total}</div><pre>${JSON.stringify(data, null, 2).substring(0, 3000)}</pre>`;
+      if (["completed","cancelled_due_to_timeout","cancelled_due_to_limits","cancelled_by_user","errored"].includes(status)) {
+        clearInterval(crawlTimer); crawlTimer = null;
       }
     } catch (err) {
-      resultEl.innerHTML = `<span style="color:var(--error)">Poll error: ${err.message}</span>`;
-      clearInterval(crawlTimer);
-      crawlTimer = null;
+      resultEl.innerHTML = `<div style="color:var(--red)">Poll error: ${err.message}</div>`;
+      clearInterval(crawlTimer); crawlTimer = null;
     }
   }, 3000);
 }
 
 async function displayResult(resp, tab) {
   const ct = resp.headers.get("Content-Type") || "";
+
   if (ct.includes("image")) {
-    const blob = await resp.blob();
-    resultEl.innerHTML = `<img src="${URL.createObjectURL(blob)}" />`;
+    lastBlob = await resp.blob();
+    lastFilename = "screenshot.png";
+    resultEl.innerHTML = `<img src="${URL.createObjectURL(lastBlob)}" />`;
+    setResultActions([
+      { label: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download', cls: "btn-primary", fn: () => downloadBlob(lastBlob, lastFilename) },
+    ]);
   } else if (ct.includes("pdf")) {
-    const blob = await resp.blob();
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "output.pdf";
-    a.textContent = "Download PDF";
-    resultEl.innerHTML = "";
-    resultEl.appendChild(a);
+    lastBlob = await resp.blob();
+    lastFilename = "output.pdf";
+    resultEl.innerHTML = '<div class="result-empty">PDF generated successfully</div>';
+    setResultActions([
+      { label: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download PDF', cls: "btn-primary", fn: () => downloadBlob(lastBlob, lastFilename) },
+    ]);
   } else {
+    lastBlob = null;
     const text = await resp.text();
+    setResultActions([]);
     try {
       const json = JSON.parse(text);
       if (tab === "markdown" && json.result) {
         resultEl.innerHTML = `<pre>${json.result}</pre>`;
+        setResultActions([
+          { label: 'Copy', cls: "btn-ghost", fn: () => { navigator.clipboard.writeText(json.result); } },
+        ]);
       } else if (tab === "content" && json.result) {
-        resultEl.innerHTML = `<pre>${json.result.substring(0, 5000)}</pre>`;
+        resultEl.innerHTML = `<pre>${json.result.substring(0, 8000)}</pre>`;
       } else {
         resultEl.innerHTML = `<pre>${JSON.stringify(json, null, 2)}</pre>`;
+        setResultActions([
+          { label: 'Copy', cls: "btn-ghost", fn: () => { navigator.clipboard.writeText(JSON.stringify(json, null, 2)); } },
+        ]);
       }
     } catch {
       resultEl.innerHTML = `<pre>${text}</pre>`;
@@ -294,49 +561,51 @@ async function displayResult(resp, tab) {
   }
 }
 
+// ---- Session actions ----
 async function createSession() {
-  resultEl.innerHTML = '<span class="loading">Creating session...</span>';
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Creating session...</div>';
   const resp = await apiFetch("/api/session", { method: "POST" });
   const data = await resp.json();
   if (resp.ok) {
     activeSessionId = data.sessionId;
     renderSessionPanel();
-    resultEl.innerHTML = `<pre>Session created: ${activeSessionId}</pre>`;
+    resultEl.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
   } else {
-    resultEl.innerHTML = `<span style="color:var(--error)">Error: ${JSON.stringify(data)}</span>`;
+    resultEl.innerHTML = `<div style="color:var(--red)">${JSON.stringify(data)}</div>`;
   }
 }
 
 async function closeSession() {
   if (!activeSessionId) return;
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Closing...</div>';
   await apiFetch(`/api/session/${activeSessionId}`, { method: "DELETE" });
   activeSessionId = null;
   renderSessionPanel();
-  resultEl.innerHTML = "Session closed.";
+  resultEl.innerHTML = '<div class="result-empty">Session closed</div>';
 }
 
 async function sessionNavigate() {
   const url = document.getElementById("sessionUrl").value;
-  resultEl.innerHTML = '<span class="loading">Navigating...</span>';
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Navigating...</div>';
   const resp = await apiFetch(`/api/session/${activeSessionId}/navigate`, { method: "POST", body: JSON.stringify({ url }) });
   resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
 }
 
 async function sessionScreenshot() {
-  resultEl.innerHTML = '<span class="loading">Taking screenshot...</span>';
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Taking screenshot...</div>';
   const resp = await apiFetch(`/api/session/${activeSessionId}/screenshot`, { method: "POST", body: JSON.stringify({}) });
   await displayResult(resp, "screenshot");
 }
 
 async function sessionPdf() {
-  resultEl.innerHTML = '<span class="loading">Generating PDF...</span>';
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Generating PDF...</div>';
   const resp = await apiFetch(`/api/session/${activeSessionId}/pdf`, { method: "POST", body: JSON.stringify({}) });
   await displayResult(resp, "pdf");
 }
 
 async function sessionEvaluate() {
   const expression = document.getElementById("sessionJs").value;
-  resultEl.innerHTML = '<span class="loading">Evaluating...</span>';
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Evaluating...</div>';
   const resp = await apiFetch(`/api/session/${activeSessionId}/evaluate`, { method: "POST", body: JSON.stringify({ expression }) });
   resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
 }
@@ -345,7 +614,7 @@ async function sessionAction() {
   const type = document.getElementById("sessionActionType").value;
   const selector = document.getElementById("sessionSelector").value;
   const value = document.getElementById("sessionValue").value;
-  resultEl.innerHTML = '<span class="loading">Running action...</span>';
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Running action...</div>';
   const resp = await apiFetch(`/api/session/${activeSessionId}/action`, { method: "POST", body: JSON.stringify({ type, selector, value }) });
   resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
 }
