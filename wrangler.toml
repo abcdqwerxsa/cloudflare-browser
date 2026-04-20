@@ -1,0 +1,16 @@
+name = "browser-run-toolkit"
+main = "src/index.js"
+compatibility_date = "2026-04-20"
+compatibility_flags = ["nodejs_compat"]
+
+[browser]
+binding = "MYBROWSER"
+
+[durable_objects]
+bindings = [
+  { name = "BROWSER_SESSIONS", class_name = "BrowserSessionDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BrowserSessionDO"]
