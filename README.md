@@ -1,94 +1,94 @@
 # Browser Run Toolkit
 
-A Cloudflare Workers service that wraps [Browser Run](https://developers.cloudflare.com/browser-run/) capabilities into a web service with both a frontend UI and backend API for remote calls.
+基于 [Cloudflare Browser Run](https://developers.cloudflare.com/browser-run/) 的浏览器即服务工具，提供前端 UI 和后端 API，支持远程调用。
 
-**Live Demo:** `https://browser-run-toolkit.jeanpaul20020519.workers.dev`
+**在线演示：** `https://browser-run-toolkit.jeanpaul20020519.workers.dev`
 
-## Features
+## 功能特性
 
-### Quick Actions (Stateless)
-One-shot HTTP endpoints that proxy to Cloudflare Browser Rendering API:
+### 快捷操作（无状态）
+一次性 HTTP 请求，代理到 Cloudflare Browser Rendering API：
 
-| Action | Endpoint | Description |
-|--------|----------|-------------|
-| Screenshot | `POST /api/screenshot` | Capture page screenshot (PNG) |
-| PDF | `POST /api/pdf` | Generate page PDF |
-| Markdown | `POST /api/markdown` | Extract page as Markdown |
-| AI / JSON | `POST /api/json` | Extract structured JSON with AI prompt |
-| Scraper | `POST /api/scrape` | Scrape elements by CSS selectors |
-| Links | `POST /api/links` | Extract all links from page |
-| Content | `POST /api/content` | Get page content |
-| Snapshot | `POST /api/snapshot` | Get DOM snapshot |
+| 操作 | 端点 | 说明 |
+|------|------|------|
+| 截图 | `POST /api/screenshot` | 网页截图（PNG） |
+| PDF | `POST /api/pdf` | 生成网页 PDF |
+| Markdown | `POST /api/markdown` | 提取页面为 Markdown |
+| AI / JSON | `POST /api/json` | 通过 AI 提示词提取结构化 JSON |
+| 爬取 | `POST /api/scrape` | 按 CSS 选择器爬取页面元素 |
+| 链接 | `POST /api/links` | 提取页面所有链接 |
+| 内容 | `POST /api/content` | 获取页面内容 |
+| 快照 | `POST /api/snapshot` | 获取 DOM 快照 |
 
-### Crawl (Async)
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/crawl` | POST | Start a crawl job |
-| `/api/crawl/:jobId` | GET | Poll crawl status |
-| `/api/crawl/:jobId` | DELETE | Cancel a crawl |
+### 爬虫（异步）
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/crawl` | POST | 启动爬虫任务 |
+| `/api/crawl/:jobId` | GET | 查询爬虫状态 |
+| `/api/crawl/:jobId` | DELETE | 取消爬虫任务 |
 
-### Sessions (Stateful)
-Persistent browser instances via Durable Objects with state preserved across requests:
+### 持久会话（有状态）
+通过 Durable Objects 保持浏览器实例，跨请求保持状态：
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/session` | POST | Create a new session |
-| `/api/session/:id` | GET | Get session status |
-| `/api/session/:id/navigate` | POST | Navigate to URL |
-| `/api/session/:id/screenshot` | POST | Take screenshot |
-| `/api/session/:id/pdf` | POST | Generate PDF |
-| `/api/session/:id/evaluate` | POST | Evaluate JavaScript |
-| `/api/session/:id/action` | POST | Click, fill, type, or wait |
-| `/api/session/:id/cookies` | POST | Set cookies |
-| `/api/session/:id` | DELETE | Close session |
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/session` | POST | 创建新会话 |
+| `/api/session/:id` | GET | 查询会话状态 |
+| `/api/session/:id/navigate` | POST | 导航到指定 URL |
+| `/api/session/:id/screenshot` | POST | 截图 |
+| `/api/session/:id/pdf` | POST | 生成 PDF |
+| `/api/session/:id/evaluate` | POST | 执行 JavaScript |
+| `/api/session/:id/action` | POST | 点击、填充、输入、等待 |
+| `/api/session/:id/cookies` | POST | 设置 Cookie |
+| `/api/session/:id` | DELETE | 关闭会话 |
 
-Sessions auto-close after 60 seconds of inactivity.
+会话在 60 秒无操作后自动关闭。
 
-## Architecture
+## 架构
 
 ```
-                    ┌──────────────────────────────┐
-                    │        Cloudflare Worker       │
-                    │                                │
-  Browser ───────► │  /          → Frontend UI       │
-                    │  /api/*    → Auth middleware     │
-                    │     ├── Quick Actions → CF API  │
-                    │     ├── Crawl        → CF API  │
-                    │     └── Sessions     → DO stub │
-                    │                                  │
+                    ┌───────────────────────────────┐
+                    │        Cloudflare Worker        │
+                    │                                 │
+  浏览器 ────────► │  /          → 前端 UI            │
+                    │  /api/*    → 认证中间件           │
+                    │     ├── 快捷操作  → CF API 代理  │
+                    │     ├── 爬虫      → CF API 代理  │
+                    │     └── 会话      → DO 实例      │
+                    │                                 │
                     │  Durable Object (BrowserSessionDO)
-                    │     └── Puppeteer browser instance
-                    └──────────────────────────────────┘
+                    │     └── Puppeteer 浏览器实例      │
+                    └─────────────────────────────────┘
 ```
 
-**Hybrid approach:**
-- Quick Actions & Crawl → proxy to Cloudflare Browser Rendering API (no browser in Worker)
-- Sessions → Puppeteer via `@cloudflare/puppeteer` in Durable Objects (lazy launch on first operation)
+**混合架构：**
+- 快捷操作 & 爬虫 → 代理到 Cloudflare Browser Rendering API（Worker 内无浏览器）
+- 持久会话 → 通过 `@cloudflare/puppeteer` 在 Durable Object 中运行浏览器（首次操作时懒加载启动）
 
-## Setup
+## 部署
 
-### Prerequisites
+### 前置要求
 
 - Node.js 18+
-- Cloudflare account with Workers Paid plan (required for Browser Rendering)
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) (`npm install -g wrangler`)
+- Cloudflare 账户（需 Workers 付费计划，Browser Rendering 依赖）
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)（`npm install -g wrangler`）
 
-### Deploy
+### 部署步骤
 
 ```bash
 git clone https://github.com/abcdqwerxsa/cloudflare-browser.git
 cd cloudflare-browser
 npm install
 
-# Login to Cloudflare
+# 登录 Cloudflare
 npx wrangler login
 
-# Set secrets
-npx wrangler secret put API_KEYS          # Your custom API key(s), comma-separated
-npx wrangler secret put CF_ACCOUNT_ID     # Your Cloudflare Account ID
-npx wrangler secret put CF_API_TOKEN      # Cloudflare API token with Browser Rendering access
+# 设置密钥
+npx wrangler secret put API_KEYS          # 自定义 API 密钥，多个用逗号分隔
+npx wrangler secret put CF_ACCOUNT_ID     # Cloudflare 账户 ID
+npx wrangler secret put CF_API_TOKEN      # Cloudflare API Token（需 Browser Rendering 权限）
 
-# Deploy
+# 部署
 npx wrangler deploy
 ```
 
@@ -113,11 +113,11 @@ tag = "v1"
 new_sqlite_classes = ["BrowserSessionDO"]
 ```
 
-## API Usage
+## API 使用
 
-All `/api/*` endpoints require authentication via `Authorization: Bearer <key>` header.
+所有 `/api/*` 端点需要通过 `Authorization: Bearer <密钥>` 请求头认证。
 
-### Example: Screenshot
+### 示例：网页截图
 
 ```bash
 curl -X POST https://your-worker.workers.dev/api/screenshot \
@@ -127,7 +127,7 @@ curl -X POST https://your-worker.workers.dev/api/screenshot \
   --output screenshot.png
 ```
 
-### Example: AI JSON Extraction
+### 示例：AI JSON 提取
 
 ```bash
 curl -X POST https://your-worker.workers.dev/api/json \
@@ -135,68 +135,68 @@ curl -X POST https://your-worker.workers.dev/api/json \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com/product",
-    "prompt": "Extract product name, price, and description"
+    "prompt": "提取商品名称、价格和描述"
   }'
 ```
 
-### Example: Crawl
+### 示例：爬虫
 
 ```bash
-# Start crawl
+# 启动爬虫
 curl -X POST https://your-worker.workers.dev/api/crawl \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com","limit":10,"depth":2}'
 
-# Check status
+# 查询状态
 curl https://your-worker.workers.dev/api/crawl/<jobId> \
   -H "Authorization: Bearer your-api-key"
 ```
 
-### Example: Session
+### 示例：持久会话
 
 ```bash
-# Create session (instant, browser launches on first operation)
+# 创建会话（即时返回，浏览器在首次操作时启动）
 curl -X POST https://your-worker.workers.dev/api/session \
   -H "Authorization: Bearer your-api-key"
 
-# Navigate
+# 导航
 curl -X POST https://your-worker.workers.dev/api/session/<id>/navigate \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com"}'
 
-# Take screenshot
+# 截图
 curl -X POST https://your-worker.workers.dev/api/session/<id>/screenshot \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{}' --output shot.png
 
-# Evaluate JS
+# 执行 JS
 curl -X POST https://your-worker.workers.dev/api/session/<id>/evaluate \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"expression":"document.title"}'
 
-# Close session
+# 关闭会话
 curl -X DELETE https://your-worker.workers.dev/api/session/<id> \
   -H "Authorization: Bearer your-api-key"
 ```
 
-## Project Structure
+## 项目结构
 
 ```
 src/
-├── index.js          # Worker entry point, route dispatch
-├── auth.js           # API key authentication
-├── quick-actions.js  # Proxy to Browser Rendering API
-├── crawl.js          # Crawl job management
-├── sessions.js       # Session routing to Durable Objects
-├── browser-do.js     # Durable Object: browser lifecycle & operations
+├── index.js          # Worker 入口，路由分发
+├── auth.js           # API 密钥认证
+├── quick-actions.js  # 代理到 Browser Rendering API
+├── crawl.js          # 爬虫任务管理
+├── sessions.js       # 会话路由到 Durable Object
+├── browser-do.js     # Durable Object：浏览器生命周期与操作
 └── frontend/
-    └── index.html    # Dark-themed frontend UI
+    └── index.html    # 深色主题前端 UI
 ```
 
-## License
+## 许可证
 
 MIT
