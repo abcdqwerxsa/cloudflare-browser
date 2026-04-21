@@ -31,7 +31,8 @@ export class BrowserSessionDO {
         try {
           if (!this.env.MYBROWSER) throw new Error("Browser binding not configured");
           this.browser = await puppeteer.launch(this.env.MYBROWSER);
-          this.page = await this.browser.newPage();
+          const pages = await this.browser.pages();
+          this.page = pages[0];
           this.lastActivity = Date.now();
           await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
           return new Response(JSON.stringify({ status: "active" }), {
