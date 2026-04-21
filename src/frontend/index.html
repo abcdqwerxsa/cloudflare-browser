@@ -232,12 +232,13 @@ const TABS = [
   ]},
   { group: "Advanced", items: [
     { id: "crawl", label: "Crawl" },
-    { id: "session", label: "Session" },
   ]},
+    { id: "session", label: "Session" },
 ];
 
 let activeTab = "screenshot";
 let activeSessionId = null;
+let sessionPollTimer = null;
 let crawlJobId = null;
 let crawlTimer = null;
 let lastBlob = null;
@@ -281,6 +282,108 @@ function renderTabContent() {
   if (activeTab === "session") { renderSessionPanel(); return; }
   tabContent.innerHTML = renderForm();
 }
+
+function renderSessionPanel() {
+  const active = !!activeSessionId;
+  tabContent.innerHTML = `<div class="card">
+    <div class="session-header">
+      <div class="session-status">
+        <div class="session-dot ${active ? 'active' : ''}"></div>
+        <strong>${active ? activeSessionId.substring(0,8) + '...' : 'No active session'}</strong>
+      </div>
+      ${active ? '<button class="btn btn-danger btn-sm" onclick="closeSession()">Close Session</button>' : '<button class="btn btn-green btn-sm" onclick="createSession()">Create Session</button>'}
+    </div>
+    ${active ? `
+    <div class="session-grid">
+      <div class="full form-group"><label>Navigate to URL</label><input id="sessionUrl" class="form-input" placeholder="https://example.com" /></div>
+      <div class="full action-bar">
+        <button class="btn btn-primary btn-sm" onclick="sessionNavigate()">Navigate</button>
+        <button class="btn btn-ghost btn-sm" onclick="sessionScreenshot()">Screenshot</button>
+        <button class="btn btn-ghost btn-sm" onclick="sessionPdf()">PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="sessionStatus()">Status</button>
+      </div>
+      <div class="full form-group"><label>Evaluate JavaScript</label><textarea id="sessionJs" class="form-input" placeholder="document.title"></textarea></div>
+      <div class="full action-bar"><button class="btn btn-primary btn-sm" onclick="sessionEvaluate()">Evaluate</button></div>
+      <div class="full form-group"><label>Browser Action</label></div>
+      <div class="form-group"><select id="sessionActionType" class="form-input"><option value="click">Click</option><option value="fill">Fill</option><option value="type">Type</option><option value="wait">Wait</option></select></div>
+      <div class="form-group"><div style="display:flex;gap:6px"><input id="sessionSelector" class="form-input" placeholder="CSS selector" /><input id="sessionValue" class="form-input" placeholder="Value" style="max-width:140px" /><button class="btn btn-primary btn-sm" onclick="sessionAction()">Run</button></div></div>
+    </div>` : '<p style="color:var(--muted);padding:16px 0;text-align:center">Create a session to start a persistent browser instance with state preserved across requests.</p>'}
+  </div>`;
+}
+
+// ---- Session actions ----
+async function createSession() {
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Creating session & launching browser...</div>';
+  activeSessionId = crypto.randomUUID();
+  renderSessionPanel();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 90000);
+    const resp = await apiFetch(`/api/session/${activeSessionId}/launch`, { method: "POST", signal: ctrl.signal });
+    clearTimeout(timer);
+    const data = await resp.json();
+    if (resp.ok && data.status === "active") {
+      resultEl.innerHTML = '<div style="color:var(--green)">Session created and browser ready!</div>';
+      renderSessionPanel();
+      document.querySelector('.session-dot')?.classList.add('active');
+    } else {
+      resultEl.innerHTML = `<div style="color:var(--red)">${JSON.stringify(data)}</div>`;
+    }
+  } catch (err) {
+    resultEl.innerHTML = `<div style="color:var(--yellow)">Session ${activeSessionId.substring(0,8)}... created. Browser is still launching, please retry the operation in a moment.</div>`;
+  }
+}
+
+async function closeSession() {
+  if (!activeSessionId) return;
+  if (sessionPollTimer) { clearInterval(sessionPollTimer); sessionPollTimer = null; }
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Closing...</div>';
+  try { await apiFetch(`/api/session/${activeSessionId}`, { method: "DELETE" }); } catch {}
+  activeSessionId = null;
+  renderSessionPanel();
+  resultEl.innerHTML = '<div class="result-empty">Session closed</div>';
+}
+
+async function sessionNavigate() {
+  const url = document.getElementById("sessionUrl").value;
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Navigating...</div>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/navigate`, { method: "POST", body: JSON.stringify({ url }) });
+  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
+}
+
+async function sessionScreenshot() {
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Taking screenshot...</div>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/screenshot`, { method: "POST", body: JSON.stringify({}) });
+  await displayResult(resp, "screenshot");
+}
+
+async function sessionPdf() {
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Generating PDF...</div>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/pdf`, { method: "POST", body: JSON.stringify({}) });
+  await displayResult(resp, "pdf");
+}
+
+async function sessionEvaluate() {
+  const expression = document.getElementById("sessionJs").value;
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Evaluating...</div>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/evaluate`, { method: "POST", body: JSON.stringify({ expression }) });
+  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
+}
+
+async function sessionAction() {
+  const type = document.getElementById("sessionActionType").value;
+  const selector = document.getElementById("sessionSelector").value;
+  const value = document.getElementById("sessionValue").value;
+  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Running action...</div>';
+  const resp = await apiFetch(`/api/session/${activeSessionId}/action`, { method: "POST", body: JSON.stringify({ type, selector, value }) });
+  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
+}
+
+async function sessionStatus() {
+  const resp = await apiFetch(`/api/session/${activeSessionId}`);
+  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
+}
+
 
 function renderForm() {
   const t = activeTab;
@@ -329,34 +432,6 @@ function renderForm() {
 function toggleAdv(el) {
   el.classList.toggle("open");
   el.nextElementSibling.classList.toggle("open");
-}
-
-function renderSessionPanel() {
-  const active = !!activeSessionId;
-  tabContent.innerHTML = `<div class="card">
-    <div class="session-header">
-      <div class="session-status">
-        <div class="session-dot ${active ? 'active' : ''}"></div>
-        <strong>${active ? activeSessionId.substring(0,8) + '...' : 'No active session'}</strong>
-      </div>
-      ${active ? '<button class="btn btn-danger btn-sm" onclick="closeSession()">Close Session</button>' : '<button class="btn btn-green btn-sm" onclick="createSession()">Create Session</button>'}
-    </div>
-    ${active ? `
-    <div class="session-grid">
-      <div class="full form-group"><label>Navigate to URL</label><input id="sessionUrl" class="form-input" placeholder="https://example.com" /></div>
-      <div class="full action-bar">
-        <button class="btn btn-primary btn-sm" onclick="sessionNavigate()">Navigate</button>
-        <button class="btn btn-ghost btn-sm" onclick="sessionScreenshot()">Screenshot</button>
-        <button class="btn btn-ghost btn-sm" onclick="sessionPdf()">PDF</button>
-        <button class="btn btn-ghost btn-sm" onclick="sessionStatus()">Status</button>
-      </div>
-      <div class="full form-group"><label>Evaluate JavaScript</label><textarea id="sessionJs" class="form-input" placeholder="document.title"></textarea></div>
-      <div class="full action-bar"><button class="btn btn-primary btn-sm" onclick="sessionEvaluate()">Evaluate</button></div>
-      <div class="full form-group"><label>Browser Action</label></div>
-      <div class="form-group"><select id="sessionActionType" class="form-input"><option value="click">Click</option><option value="fill">Fill</option><option value="type">Type</option><option value="wait">Wait</option></select></div>
-      <div class="form-group"><div style="display:flex;gap:6px"><input id="sessionSelector" class="form-input" placeholder="CSS selector" /><input id="sessionValue" class="form-input" placeholder="Value" style="max-width:140px" /><button class="btn btn-primary btn-sm" onclick="sessionAction()">Run</button></div></div>
-    </div>` : '<p style="color:var(--muted);padding:16px 0;text-align:center">Create a session to start a persistent browser instance with state preserved across requests.</p>'}
-  </div>`;
 }
 
 // ---- API helpers ----
@@ -562,61 +637,6 @@ async function displayResult(resp, tab) {
   }
 }
 
-// ---- Session actions ----
-async function createSession() {
-  activeSessionId = crypto.randomUUID();
-  renderSessionPanel();
-  resultEl.innerHTML = `<div style="color:var(--green)">Session created: ${activeSessionId.substring(0,8)}...<br><span style="color:var(--muted);font-size:12px">Browser will launch on first operation</span></div>`;
-}
-
-async function closeSession() {
-  if (!activeSessionId) return;
-  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Closing...</div>';
-  await apiFetch(`/api/session/${activeSessionId}`, { method: "DELETE" });
-  activeSessionId = null;
-  renderSessionPanel();
-  resultEl.innerHTML = '<div class="result-empty">Session closed</div>';
-}
-
-async function sessionNavigate() {
-  const url = document.getElementById("sessionUrl").value;
-  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Navigating...</div>';
-  const resp = await apiFetch(`/api/session/${activeSessionId}/navigate`, { method: "POST", body: JSON.stringify({ url }) });
-  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
-}
-
-async function sessionScreenshot() {
-  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Taking screenshot...</div>';
-  const resp = await apiFetch(`/api/session/${activeSessionId}/screenshot`, { method: "POST", body: JSON.stringify({}) });
-  await displayResult(resp, "screenshot");
-}
-
-async function sessionPdf() {
-  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Generating PDF...</div>';
-  const resp = await apiFetch(`/api/session/${activeSessionId}/pdf`, { method: "POST", body: JSON.stringify({}) });
-  await displayResult(resp, "pdf");
-}
-
-async function sessionEvaluate() {
-  const expression = document.getElementById("sessionJs").value;
-  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Evaluating...</div>';
-  const resp = await apiFetch(`/api/session/${activeSessionId}/evaluate`, { method: "POST", body: JSON.stringify({ expression }) });
-  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
-}
-
-async function sessionAction() {
-  const type = document.getElementById("sessionActionType").value;
-  const selector = document.getElementById("sessionSelector").value;
-  const value = document.getElementById("sessionValue").value;
-  resultEl.innerHTML = '<div class="result-loading"><div class="spinner"></div>Running action...</div>';
-  const resp = await apiFetch(`/api/session/${activeSessionId}/action`, { method: "POST", body: JSON.stringify({ type, selector, value }) });
-  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
-}
-
-async function sessionStatus() {
-  const resp = await apiFetch(`/api/session/${activeSessionId}`);
-  resultEl.innerHTML = `<pre>${await resp.text()}</pre>`;
-}
 
 renderTabContent();
 </script>

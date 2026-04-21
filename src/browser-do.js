@@ -8,18 +8,8 @@ export class BrowserSessionDO {
     this.env = env;
     this.browser = null;
     this.page = null;
+    this.launchError = null;
     this.lastActivity = Date.now();
-  }
-
-  async ensureBrowser() {
-    if (this.browser && this.page) return;
-    if (!this.env.MYBROWSER) {
-      throw new Error("Browser binding (MYBROWSER) not configured");
-    }
-    this.browser = await puppeteer.launch(this.env.MYBROWSER);
-    this.page = await this.browser.newPage();
-    this.lastActivity = Date.now();
-    await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
   }
 
   async fetch(request) {
@@ -27,25 +17,55 @@ export class BrowserSessionDO {
     const path = url.pathname;
 
     try {
+      if (request.method === "GET" && path === "/status") return this.handleStatus();
       if (request.method === "DELETE" && path === "/close") return await this.handleClose();
-      if (request.method === "GET" && path === "/status") return await this.handleStatus();
 
-      // All write operations auto-launch browser on first use
-      if (request.method === "POST") {
-        await this.ensureBrowser();
-        this.lastActivity = Date.now();
-        await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
+      if (request.method === "POST" && path === "/launch") {
+        // If already launched, return immediately
+        if (this.browser) {
+          return new Response(JSON.stringify({ status: "active" }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        // Synchronous launch — will keep running even if Worker times out
+        try {
+          if (!this.env.MYBROWSER) throw new Error("Browser binding not configured");
+          this.browser = await puppeteer.launch(this.env.MYBROWSER);
+          this.page = await this.browser.newPage();
+          this.lastActivity = Date.now();
+          await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
+          return new Response(JSON.stringify({ status: "active" }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (err) {
+          this.launchError = err.message;
+          return new Response(JSON.stringify({ error: err.message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
 
-        if (path === "/navigate") return await this.handleNavigate(request);
-        if (path === "/screenshot") return await this.handleScreenshot(request);
-        if (path === "/pdf") return await this.handlePdf(request);
-        if (path === "/evaluate") return await this.handleEvaluate(request);
-        if (path === "/action") return await this.handleAction(request);
-        if (path === "/cookies") return await this.handleCookies(request);
-        if (path === "/launch") return new Response(JSON.stringify({ status: "launched" }), {
+      // All other operations require browser
+      if (!this.browser || !this.page) {
+        return new Response(JSON.stringify({
+          error: "Browser not ready",
+          status: this.browser ? "active" : "inactive",
+        }), {
+          status: 503,
           headers: { "Content-Type": "application/json" },
         });
       }
+
+      this.lastActivity = Date.now();
+      await this.state.storage.setAlarm(Date.now() + MAX_IDLE_MS);
+
+      if (request.method === "POST" && path === "/navigate") return await this.handleNavigate(request);
+      if (request.method === "POST" && path === "/screenshot") return await this.handleScreenshot(request);
+      if (request.method === "POST" && path === "/pdf") return await this.handlePdf(request);
+      if (request.method === "POST" && path === "/evaluate") return await this.handleEvaluate(request);
+      if (request.method === "POST" && path === "/action") return await this.handleAction(request);
+      if (request.method === "POST" && path === "/cookies") return await this.handleCookies(request);
 
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
@@ -59,6 +79,17 @@ export class BrowserSessionDO {
     }
   }
 
+  handleStatus() {
+    return new Response(JSON.stringify({
+      status: this.browser ? "active" : (this.launchError ? "error" : "inactive"),
+      error: this.launchError,
+      lastActivity: this.lastActivity,
+      url: this.page ? this.page.url() : null,
+    }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   async handleNavigate(request) {
     const { url, options } = await request.json();
     await this.page.goto(url, options || { waitUntil: "domcontentloaded" });
@@ -70,22 +101,18 @@ export class BrowserSessionDO {
   async handleScreenshot(request) {
     const { options } = await request.json();
     const img = await this.page.screenshot(options || {});
-    return new Response(img, {
-      headers: { "Content-Type": "image/png" },
-    });
+    return new Response(img, { headers: { "Content-Type": "image/png" } });
   }
 
   async handlePdf(request) {
     const { options } = await request.json();
     const pdf = await this.page.pdf(options || {});
-    return new Response(pdf, {
-      headers: { "Content-Type": "application/pdf" },
-    });
+    return new Response(pdf, { headers: { "Content-Type": "application/pdf" } });
   }
 
   async handleEvaluate(request) {
     const { expression } = await request.json();
-    const result = await this.page.evaluate(new Function(expression));
+    const result = await this.page.evaluate(expression);
     return new Response(JSON.stringify({ result }), {
       headers: { "Content-Type": "application/json" },
     });
@@ -94,22 +121,13 @@ export class BrowserSessionDO {
   async handleAction(request) {
     const { type, selector, value } = await request.json();
     switch (type) {
-      case "click":
-        await this.page.click(selector);
-        break;
-      case "fill":
-        await this.page.$eval(selector, (el, v) => { el.value = v; }, value);
-        break;
-      case "type":
-        await this.page.type(selector, value);
-        break;
-      case "wait":
-        await this.page.waitForSelector(selector, { timeout: 30000 });
-        break;
+      case "click": await this.page.click(selector); break;
+      case "fill": await this.page.$eval(selector, (el, v) => { el.value = v; }, value); break;
+      case "type": await this.page.type(selector, value); break;
+      case "wait": await this.page.waitForSelector(selector, { timeout: 30000 }); break;
       default:
-        return new Response(JSON.stringify({ error: `Unknown action type: ${type}` }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
+        return new Response(JSON.stringify({ error: `Unknown action: ${type}` }), {
+          status: 400, headers: { "Content-Type": "application/json" },
         });
     }
     return new Response(JSON.stringify({ status: "ok", type }), {
@@ -125,22 +143,11 @@ export class BrowserSessionDO {
     });
   }
 
-  async handleStatus() {
-    return new Response(JSON.stringify({
-      status: this.browser ? "active" : "inactive",
-      lastActivity: this.lastActivity,
-      url: this.page ? this.page.url() : null,
-    }), {
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
   async handleClose() {
-    if (this.browser) {
-      try { await this.browser.close(); } catch {}
-      this.browser = null;
-      this.page = null;
-    }
+    if (this.browser) { try { await this.browser.close(); } catch {} }
+    this.browser = null;
+    this.page = null;
+    this.launchError = null;
     return new Response(JSON.stringify({ status: "closed" }), {
       headers: { "Content-Type": "application/json" },
     });
